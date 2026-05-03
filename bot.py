@@ -11,13 +11,13 @@ from typing import Any, Optional
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import anthropic
+from groq import Groq
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 app = FastAPI(title="Vera Bot")
 BOOT_TIME = time.time()
-MODEL = os.environ.get("MODEL", "claude-sonnet-4-6")
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+MODEL = os.environ.get("MODEL", "llama-3.3-70b-versatile")
+client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 
 # ─── In-memory state ─────────────────────────────────────────────────────────
 # (scope, context_id) → {version: int, payload: dict}
@@ -288,14 +288,16 @@ def compose(
 ) -> dict:
     prompt = _build_compose_prompt(category, merchant, trigger, customer)
     try:
-        resp = client.messages.create(
+        resp = client.chat.completions.create(
             model=MODEL,
             max_tokens=1024,
             temperature=0,
-            system=_COMPOSE_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": _COMPOSE_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
         )
-        text = resp.content[0].text.strip()
+        text = resp.choices[0].message.content.strip()
         # Strip markdown fences if present despite instructions
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text.strip())
@@ -371,14 +373,16 @@ Respond. If they confirmed → take action. If off-topic → decline + redirect.
 Raw JSON only: {{"action": "send", "body": "...", "cta": "open_ended|binary_yes_no|none", "rationale": "..."}}"""
 
     try:
-        resp = client.messages.create(
+        resp = client.chat.completions.create(
             model=MODEL,
             max_tokens=512,
             temperature=0,
-            system=_REPLY_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": _REPLY_SYSTEM},
+                {"role": "user", "content": prompt},
+            ],
         )
-        text = resp.content[0].text.strip()
+        text = resp.choices[0].message.content.strip()
         text = re.sub(r"^```(?:json)?\s*", "", text)
         text = re.sub(r"\s*```$", "", text.strip())
         m = re.search(r"\{[\s\S]*\}", text)
